@@ -1,0 +1,14 @@
+---
+# Composite Resource (XR)
+apiVersion: platform.example.com/v1alpha1
+kind: Cluster
+metadata:
+  name: ${{ values.name | dump }}
+  namespace: ${{ values.namespace | default('default') | dump }}
+spec:
+  nodeSize: ${{ values.nodeSize | default('medium') | dump }}
+  nodeCount: ${{ values.nodeCount | default(3) }}
+  storageSize: ${{ values.storageSize | default(10) }}
+  version: ${{ values.version | default('1.31.1') | dump }}
+  cloud:
+    providerName: ${{ values.cloudProvider | default('azure') | dump }}

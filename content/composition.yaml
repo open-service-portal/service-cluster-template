@@ -1,0 +1,141 @@
+---
+# Composition (XC)
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: cluster
+spec:
+  compositeTypeRef:
+    apiVersion: platform.example.com/v1alpha1
+    kind: XCluster
+  mode: Pipeline
+  pipeline:
+    # Load composition environment
+    # https://docs.crossplane.io/latest/concepts/environment-configs/
+    # https://github.com/crossplane-contrib/function-go-templating/tree/main/example/context
+    - step: load-composition-environment
+      functionRef:
+        name: function-environment-configs
+      input:
+        apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+        kind: Input
+        spec:
+          environmentConfigs:
+          - type: Reference
+            ref:
+              name: cluster
+
+    # Store values in ConfigMap
+    - step: store-values
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            ---
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: cluster-{{ .observed.composite.resource.spec.claimRef.name }}
+              namespace: {{ .observed.composite.resource.spec.claimRef.namespace }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: configmap
+                # Native Kubernetes objects such as ConfigMap do not have a Ready or status field.
+                # By default, they lack `status.conditions` entries, which Crossplane relies on to determine the "Ready" status.
+                # Thus, explicitly mark this ConfigMap as ready.
+                gotemplating.fn.crossplane.io/ready: "True"
+            data:
+              nodeSize: "{{ .observed.composite.resource.spec.nodeSize }}"
+              nodeCount: "{{ .observed.composite.resource.spec.nodeCount }}"
+              storageSize: "{{ .observed.composite.resource.spec.storageSize }}"
+              version: "{{ .observed.composite.resource.spec.version }}"
+              cloud: "{{ .observed.composite.resource.spec.cloud.providerName }}"
+
+    # Mock cluster creation delay
+    - step: create-cluster-nop
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            apiVersion: nop.crossplane.io/v1alpha1
+            kind: NopResource
+            metadata:
+              name: cluster-{{ .observed.composite.resource.metadata.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: cluster
+            spec:
+              forProvider:
+                conditionAfter:
+                - time: 0s
+                  conditionType: Ready
+                  conditionStatus: "False"
+                  conditionReason: "Creating"
+                - time: 30s
+                  conditionType: Ready
+                  conditionStatus: "True"
+                  conditionReason: "Available"
+              providerConfigRef:
+                name: default
+
+    - step: add-firewall-rule
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            ---
+            # Composite Resource (XR)
+            apiVersion: platform.example.com/v1alpha1
+            kind: FirewallRule
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: firewall-rule
+              name: cluster-{{ .observed.composite.resource.spec.claimRef.name }}
+              namespace: {{ .observed.composite.resource.spec.claimRef.namespace }}
+            spec:
+              source: 0.0.0.0/0
+              destination: {{ index .context "apiextensions.crossplane.io/environment" "ipaddress" }}
+
+    - step: update-status
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            ---
+            # Composite Resource (XR)
+            apiVersion: platform.example.com/v1alpha1
+            kind: XCluster
+            status:
+              kubeconfig: {{ index .context "apiextensions.crossplane.io/environment" "kubeconfig" | b64enc }}
+              ipaddress: {{ index .context "apiextensions.crossplane.io/environment" "ipaddress" }}
+
+    # Detect readiness
+    - step: detect-readiness
+      functionRef:
+        name: function-auto-ready
+
+    - step: sequence-creation
+      functionRef:
+        name: function-sequencer
+      input:
+        apiVersion: sequencer.fn.crossplane.io/v1beta1
+        kind: Input
+        rules:
+          - sequence:
+            - configmap
+            - cluster
+            - firewall-rule

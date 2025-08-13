@@ -1,0 +1,113 @@
+---
+# Composite Resource Definition (XRD)
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xclusters.platform.example.com
+spec:
+  # Create a namespaced resource (which is the default in Crossplane v2)
+  # Valid options are: Namespaced, Cluster
+  #scope: Namespaced
+  group: platform.example.com
+  names:
+    kind: XCluster
+    plural: xclusters
+  claimNames:
+    kind: Cluster
+    plural: clusters
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - metadata
+            - spec
+          properties:
+            metadata:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 63
+                  example: my-cluster
+                  pattern: '^[a-z]([-a-z0-9]*[a-z0-9])?$'
+            spec:
+              type: object
+              required:
+                - version
+                - cloud
+              properties:
+                nodeSize:
+                  title: 'Node Size'
+                  type: string
+                  enum:
+                    - small
+                    - medium
+                    - large
+                  example: medium
+                  default: medium
+                nodeCount:
+                  title: 'Node Count'
+                  type: integer
+                  minimum: 3
+                  maximum: 100
+                  example: 3
+                  default: 3
+                storageSize:
+                  title: 'Storage Size'
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  example: 1
+                  default: 10
+                version:
+                  title: 'Version'
+                  type: string
+                  enum:
+                    - "1.28.2"
+                    - "1.28.5"
+                    - "1.28.6"
+                    - "1.28.7"
+                    - "1.28.9"
+                    - "1.28.14"
+                    - "1.29.0"
+                    - "1.29.1"
+                    - "1.29.2"
+                    - "1.29.4"
+                    - "1.29.9"
+                    - "1.30.5"
+                    - "1.31.1"
+                  example: "1.31.1"
+                  default: "1.31.1"
+                  pattern: '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)'
+                cloud:
+                  type: object
+                  required:
+                    - providerName
+                  properties:
+                    providerName:
+                      title: 'Provider'
+                      type: string
+                      enum:
+                        - aws
+                        - azure
+                        - gcp
+                        - onprem
+                      example: azure
+                      default: azure
+            # Definition required to be able to patch the status field in composition
+            status:
+              type: object
+              properties:
+                kubeconfig:
+                  type: string
+                  example: aGVsbG8=
+                ipaddress:
+                  type: string
+                  example: 1.1.1.1
