@@ -5,7 +5,7 @@ metadata:
   title: Kubernetes Cluster
   description: Provision a Kubernetes cluster using Crossplane
   tags:
-    - crossplane
+    - source:github-import    - crossplane
     - kubernetes
     - cluster
     - infrastructure
